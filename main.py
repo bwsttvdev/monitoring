@@ -1,74 +1,55 @@
-import json
-import matplotlib.pyplot as plt
-import socket
-import threading
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from tkinter import Tk, Canvas
+import MySQLdb
+import time
 
-# Create a new socket object
-s = socket.socket()
 
-# Connect to the server on the specified port
-s.connect(('localhost', 8080))
+# Connect to MySQL database
+# Connect to MySQL database
+db = MySQLdb.connect(
+    host="vultr-prod-f0a9f906-d2a1-49ec-bdfb-c643c6285640-vultr-prod-e7e4.vultrdb.com",
+    port=16751,
+    user="vultradmin",
+    password="AVNS_jEuX8-w2cNqo2JqoXdP",
+    database="defaultdb"
 
-# Set the initial values for the x- and y-axes
-x = 0
-y = []
+)
+cursor = db.cursor()
 
-# Create the main window for the GUI
-root = Tk()
-root.geometry("600x400")
-root.title("CPU Usage")
+# Function to query and display latest resource data
+# Function to query and display latest resource data
+def display_resource_data():
+    # Query latest CPU usage data from MySQL database
+    cursor.execute("SELECT * FROM cpu_usage WHERE CONVERT_TZ(timestamp, @@session.time_zone, 'UTC') > DATE_SUB(NOW(), INTERVAL 1 MINUTE) ORDER BY timestamp DESC LIMIT 1")
+    cpu_data = cursor.fetchone()
+    cpu_percent = cpu_data[1]
+    cpu_timestamp = cpu_data[2]
 
-# Create a canvas to display the live graph
-canvas = Canvas(root, width=600, height=400)
-canvas.pack()
+    # Query latest memory usage data from MySQL database
+    cursor.execute("SELECT * FROM memory_usage WHERE CONVERT_TZ(timestamp, @@session.time_zone, 'UTC') > DATE_SUB(NOW(), INTERVAL 1 MINUTE) ORDER BY timestamp DESC LIMIT 1")
+    memory_data = cursor.fetchone()
+    memory_percent = memory_data[1]
+    memory_timestamp = memory_data[2]
 
-# Create the figure and axes for the graph
-fig, ax = plt.subplots()
+    # Query latest network traffic data from MySQL database
+    cursor.execute("SELECT * FROM network_traffic WHERE CONVERT_TZ(timestamp, @@session.time_zone, 'UTC') > DATE_SUB(NOW(), INTERVAL 1 MINUTE) ORDER BY timestamp DESC LIMIT 1")
+    network_data = cursor.fetchone()
+    bytes_sent = network_data[1]
+    bytes_recv = network_data[2]
+    network_timestamp = network_data[3]
 
-# Create a FigureCanvasTkAgg object to represent the figure canvas
-canvas_agg = FigureCanvasTkAgg(fig, root)
-canvas_agg.draw()
+    # Query latest disk usage data from MySQL database
+    cursor.execute("SELECT * FROM disk_usage WHERE CONVERT_TZ(timestamp, @@session.time_zone, 'UTC') > DATE_SUB(NOW(), INTERVAL 1 MINUTE) ORDER BY timestamp DESC LIMIT 1")
+    disk_data = cursor.fetchone()
+    disk_percent = disk_data[1]
+    disk_timestamp = disk_data[2]
 
-# Define a function that will be called to update the GUI
-def update_gui():
-    global x
-    # Receive the JSON data from the server
-    json_str = s.recv(1024).decode()
+    # Display latest resource data as text
+    print("CPU usage: {}% at {}".format(cpu_percent, cpu_timestamp))
+    print("Memory usage: {}% at {}".format(memory_percent, memory_timestamp))
+    print("Network traffic: {} bytes sent, {} bytes received at {}".format(bytes_sent, bytes_recv, network_timestamp))
+    print("Disk usage: {}% at {}".format(disk_percent, disk_timestamp))
 
-    # Convert the JSON string to a Python data structure
-    data = json.loads(json_str)
-
-    # Get the current CPU usage from the data
-    cpu_usage = data["cpu"]
-
-    # Update the x- and y-axes with the new data point
-    x += 1
-    y.append(cpu_usage)
-
-    # Clear the previous graph and plot the updated data
-    ax.clear()
-    ax.plot(x, y)
-
-    # Update the graph with the new data
-    plt.draw()
-    plt.pause(0.05)
-
-    # Create a PhotoImage object from the generated graph
-    photo = canvas_agg.get_tk_widget().to_photoimage(fig.canvas.get_renderer())
-
-    # Add the PhotoImage object to the canvas
-    canvas.create_image(0, 0, image=photo, anchor="nw")
-
-    # Schedule the update_gui() function to be called again after 0.1 seconds
-    root.after(100, update_gui)
-
-# Acquire the GIL
-threading.RLock().acquire()
-
-# Start the update_gui() function
-update_gui()
-
-# Start the event loop
-root.mainloop()
+# Repeatedly query and display latest resource data
+while True:
+    display_resource_data()
+    # Pause execution for 1 second between each query
+    time.sleep(5)
